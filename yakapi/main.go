@@ -148,6 +148,40 @@ func handleCI(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func handleCIPush(w http.ResponseWriter, r *http.Request) {
+	if r.Method != "POST" {
+		errorResponse(w, errors.New("POST required"), http.StatusMethodNotAllowed)
+		return
+	}
+
+	if r.Header.Get("Upgrade") != "rover" {
+		errorResponse(w, errors.New("not an upgrade"), http.StatusMethodNotAllowed)
+		return
+	}
+
+	w.WriteHeader(http.StatusSwitchingProtocols)
+
+	fmt.Println("upgrade complete")
+
+	// hijack the connection
+	conn, _, err := w.(http.Hijacker).Hijack()
+	if err != nil {
+		errorResponse(w, errors.New("hijack failed"), http.StatusMethodNotAllowed)
+		return
+	}
+
+	fmt.Println("hijack complete")
+
+	for n := 0; n < 3; n++ {
+		conn.Write([]byte("rt 30\n"))
+		time.Sleep(1 * time.Second)
+	}
+
+	conn.Close()
+
+	fmt.Println("closed")
+}
+
 func handleCamCapture(w http.ResponseWriter, r *http.Request) {
 	captureFile := os.Getenv("YAKAPI_CAM_CAPTURE_PATH")
 	if captureFile == "" {
@@ -229,6 +263,7 @@ func main() {
 	http.Handle("/v1/cam/capture", logmw(http.HandlerFunc(handleCamCapture)))
 	http.Handle("/metrics", logmw(promhttp.Handler()))
 	http.Handle("/eyes", logmw(http.HandlerFunc(eyes)))
+	http.Handle("/v1/ci_push", http.HandlerFunc(handleCIPush))
 
 	port := os.Getenv("YAKAPI_PORT")
 	if port == "" {
