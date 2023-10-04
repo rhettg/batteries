@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strings"
 )
 
 type Client struct {
@@ -37,7 +38,7 @@ func (c *Client) GetNotes(ctx context.Context) ([]Note, error) {
 		return nil, fmt.Errorf("unexpected status code: %d", resp.StatusCode)
 	}
 
-	if resp.Header.Get("Content-Type") != "application/json" {
+	if !strings.HasPrefix(resp.Header.Get("Content-Type"), "application/json") {
 		return nil, fmt.Errorf("unexpected content-type: %s", resp.Header.Get("Content-Type"))
 	}
 

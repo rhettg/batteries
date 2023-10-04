@@ -1,6 +1,8 @@
 package main
 
 import (
+	"bufio"
+	"context"
 	"embed"
 	"encoding/json"
 	"errors"
@@ -8,7 +10,9 @@ import (
 	"io/ioutil"
 	"net/http"
 	"os"
+	"regexp"
 	"runtime/debug"
+	"strings"
 	"time"
 
 	"go.uber.org/zap"
@@ -17,6 +21,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/rhettg/batteries/yakapi/internal/ci"
+	"github.com/rhettg/batteries/yakapi/internal/gds"
 	mw "github.com/rhettg/batteries/yakapi/internal/mw"
 	"tailscale.com/client/tailscale"
 )
@@ -51,6 +56,55 @@ var startTime time.Time
 
 func init() {
 	startTime = time.Now()
+}
+
+func loadDotEnv() error {
+	// Open .env file
+	f, err := os.Open(".env")
+	if err != nil {
+		if os.IsNotExist(err) {
+			// .env file does not exist, ignore
+			return nil
+		}
+		return err
+	}
+	defer f.Close()
+
+	// Read lines
+	scanner := bufio.NewScanner(f)
+	for scanner.Scan() {
+		line := scanner.Text()
+
+		// Skip empty lines
+		if len(line) == 0 {
+			continue
+		}
+
+		// Parse key/value
+		parts := strings.SplitN(line, "=", 2)
+		if len(parts) != 2 {
+			return fmt.Errorf("invalid line: %s", line)
+		}
+
+		key := strings.TrimSpace(parts[0])
+		value := strings.TrimSpace(parts[1])
+
+		// Remove surrounding quotes
+		re := regexp.MustCompile(`^(['"])(.*)\1$`)
+		value = re.ReplaceAllString(value, "$2")
+
+		// Set environment variable
+		err := os.Setenv(key, value)
+		if err != nil {
+			return err
+		}
+	}
+
+	if err := scanner.Err(); err != nil {
+		return err
+	}
+
+	return nil
 }
 
 var (
@@ -148,6 +202,53 @@ func handleCI(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func doGDSCI(ctx context.Context, c *gds.Client) error {
+	startTime := time.Now()
+
+	log.Infow("retrieving commands from GDS")
+
+	notes, err := c.GetNotes(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to retreive notes: %w", err)
+	}
+
+	req := struct {
+		Command string `json:"command"`
+	}{}
+
+	for _, n := range notes {
+		// Reset our command
+		req.Command = ""
+
+		log.Infow("processing note", "file", n.File, "note", n.Note, "created_at", n.CreatedAt)
+		if n.File != "commands.qi" {
+			continue
+		}
+
+		err = json.Unmarshal([]byte(n.Body), &req)
+		if err != nil {
+			log.Errorw("failed unmarshaling note", "error", err, "note", n.Note)
+			continue
+		}
+
+		if req.Command == "" {
+			log.Errorw("empty command", "note", n.Note)
+			continue
+		}
+
+		log.Infow("accepting command", "command", req.Command, "note", n.Note)
+		err = ci.Accept(ctx, req.Command)
+		if err != nil {
+			log.Errorw("failed accepting ci command", "error", err)
+			continue
+		}
+	}
+
+	log.Infow("finished processing notes", "note_count", len(notes), "elapsed", time.Since(startTime))
+
+	return nil
+}
+
 func handleCamCapture(w http.ResponseWriter, r *http.Request) {
 	captureFile := os.Getenv("YAKAPI_CAM_CAPTURE_PATH")
 	if captureFile == "" {
@@ -222,6 +323,8 @@ func main() {
 
 	logmw := mw.New(logger)
 
+	loadDotEnv()
+
 	http.Handle("/", logmw(http.HandlerFunc(home)))
 	http.Handle("/v1", logmw(http.HandlerFunc(homev1)))
 	http.Handle("/v1/me", logmw(http.HandlerFunc(me)))
@@ -246,6 +349,19 @@ func main() {
 			revision = s.Value
 			break
 		}
+	}
+
+	if os.Getenv("YAKAPI_GDS_API_URL") != "" {
+		go func() {
+			c := gds.New(os.Getenv("YAKAPI_GDS_API_URL"))
+			for {
+				err := doGDSCI(context.Background(), c)
+				if err != nil {
+					log.Errorw("error running GDS CI", "error", err)
+				}
+				time.Sleep(10 * time.Second)
+			}
+		}()
 	}
 
 	log.Infow("starting", "version", "1.0.0", "port", port, "build", revision)
