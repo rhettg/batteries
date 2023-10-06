@@ -161,6 +161,8 @@ func execMotorAdapter(ctx context.Context, args []string) error {
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 
+	fmt.Println("running motor adapter", name, args)
+
 	err := cmd.Run()
 	if err != nil {
 		return fmt.Errorf("failed running motor adapter: %w", err)
