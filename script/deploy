@@ -5,5 +5,6 @@ echo "==> Building"
 GOOS=linux GOARCH=arm GOARM=7 go build -o bin/yakapi-arm .
 
 echo "==> Deploying"
-scp ./bin/yakapi-arm bni:bin/yakapi
-ssh bni "sudo /usr/local/bin/install-yakapi /home/rhettg/bin/yakapi"
+target="/data/yakapi/yakapi.$(date +%Y%m%d%H%M%S)"
+scp ./bin/yakapi-arm deploy@bni:$target
+ssh deploy@bni "chmod +x $target && ln -sf $target /data/yakapi/yakapi.current && sudo systemctl restart yakapi"
