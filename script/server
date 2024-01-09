@@ -7,7 +7,7 @@ export YAKAPI_NAME="YakAPI (development)"
 export YAKAPI_PROJECT="https://github.com/rhettg/batteries/yakapi"
 export YAKAPI_ADAPTER_MOTOR="echo"
 export YAKAPI_CAM_CAPTURE_PATH="./testdata/mars.jpeg"
-export YAKAPI_GDS_API_URL="http://127.0.0.1:3000/v1/missions/5"
+export YAKAPI_GDS_API_URL="http://127.0.0.1:3000/v1/missions/8"
 
 
 ./bin/yakapi
