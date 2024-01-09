@@ -1,10 +1,13 @@
 #!/bin/bash
 set -e
 
+# First argument is the host to deploy to, default shoudl be "bni"
+host=${1:-"bni"}
+
 echo "==> Building"
 GOOS=linux GOARCH=arm GOARM=7 go build -o bin/yakapi-arm .
 
-echo "==> Deploying"
+echo "==> Deploying to ${host}"
 target="/data/yakapi/yakapi.$(date +%Y%m%d%H%M%S)"
-scp ./bin/yakapi-arm deploy@bni:$target
-ssh deploy@bni "chmod +x $target && ln -sf $target /data/yakapi/yakapi.current && sudo systemctl restart yakapi"
+scp ./bin/yakapi-arm deploy@${host}:${target}
+ssh deploy@${host} "chmod +x $target && ln -sf $target /data/yakapi/yakapi.current && sudo systemctl restart yakapi"
