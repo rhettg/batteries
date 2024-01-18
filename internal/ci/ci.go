@@ -66,7 +66,7 @@ func doFwd(ctx context.Context, args []string) error {
 		return err
 	}
 
-	err = motorAndStop(ctx, -0.75, -0.75, duration)
+	err = motorAndStop(ctx, 0.75, 0.75, duration)
 	if err != nil {
 		return err
 	}
@@ -84,7 +84,7 @@ func doFfwd(ctx context.Context, args []string) error {
 		return err
 	}
 
-	err = motorAndStop(ctx, -1.0, -1.0, duration)
+	err = motorAndStop(ctx, 1.0, 1.0, duration)
 	if err != nil {
 		return err
 	}
