@@ -102,7 +102,7 @@ func doBck(ctx context.Context, args []string) error {
 		return err
 	}
 
-	err = motorAndStop(ctx, 0.75, 0.75, duration)
+	err = motorAndStop(ctx, -0.75, -0.75, duration)
 	if err != nil {
 		return err
 	}
