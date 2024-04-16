@@ -14,12 +14,19 @@ import (
 	"github.com/redis/go-redis/v9"
 )
 
-func Accept(ctx context.Context, rdb *redis.Client, id, cmd string) error {
+type CommandID string
+
+func Accept(ctx context.Context, rdb *redis.Client, cmd string) (CommandID, error) {
 	if cmd == "" {
-		return errors.New("empty command")
+		return "", errors.New("empty command")
 	}
 
 	var err error
+
+	id, err := stream(ctx, rdb, cmd)
+	if err != nil {
+		return "", err
+	}
 
 	f := strings.Fields(cmd)
 	switch f[0] {
@@ -39,10 +46,6 @@ func Accept(ctx context.Context, rdb *redis.Client, id, cmd string) error {
 		err = errors.New("unknown command")
 	}
 
-	if rdb == nil {
-		return err
-	}
-
 	var result string
 	if err != nil {
 		result = "error"
@@ -50,18 +53,22 @@ func Accept(ctx context.Context, rdb *redis.Client, id, cmd string) error {
 		result = "ok"
 	}
 
-	resultErr := StreamResult(ctx, rdb, id, result)
+	resultErr := streamResult(ctx, rdb, id, result)
 
 	if err != nil {
-		return err
+		return id, err
 	}
 
-	return resultErr
+	return id, resultErr
 }
 
-func Stream(ctx context.Context, rdb *redis.Client, cmd string) (string, error) {
+func stream(ctx context.Context, rdb *redis.Client, cmd string) (CommandID, error) {
 	if cmd == "" {
 		return "", errors.New("empty command")
+	}
+
+	if rdb == nil {
+		return "", nil
 	}
 
 	f := strings.Fields(cmd)
@@ -79,13 +86,17 @@ func Stream(ctx context.Context, rdb *redis.Client, cmd string) (string, error) 
 
 	slog.Info("streamed command", "stream", "yakapi:ci", "id", result)
 
-	return result, nil
+	return CommandID(result), nil
 }
 
-func StreamResult(ctx context.Context, rdb *redis.Client, id, cmdResult string) error {
+func streamResult(ctx context.Context, rdb *redis.Client, id CommandID, cmdResult string) error {
+	if rdb == nil {
+		return nil
+	}
+
 	result, err := rdb.XAdd(ctx, &redis.XAddArgs{
 		Stream: "yakapi:ci:result",
-		ID:     id,
+		ID:     string(id),
 		Values: map[string]interface{}{
 			"result": cmdResult,
 		},
@@ -99,8 +110,12 @@ func StreamResult(ctx context.Context, rdb *redis.Client, id, cmdResult string) 
 	return nil
 }
 
-func FetchResult(ctx context.Context, rdb *redis.Client, id string) (string, error) {
-	messages, err := rdb.XRange(ctx, "yakapi:ci:result", id, id).Result()
+func FetchResult(ctx context.Context, rdb *redis.Client, id CommandID) (string, error) {
+	if rdb == nil {
+		return "", nil
+	}
+
+	messages, err := rdb.XRange(ctx, "yakapi:ci:result", string(id), string(id)).Result()
 	if err != nil {
 		fmt.Println("Error reading specific ID from stream:", err)
 		return "", err

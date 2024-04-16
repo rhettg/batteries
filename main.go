@@ -194,13 +194,7 @@ func handleCI(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	msgID, err := ci.Stream(r.Context(), rdb, req.Command)
-	if err != nil {
-		log.Errorw("failed streaming ci command", "error", err)
-		// Fall-through as long as we're still doing the old-ci.
-	}
-
-	err = ci.Accept(r.Context(), rdb, msgID, req.Command)
+	msgID, err := ci.Accept(r.Context(), rdb, req.Command)
 	if err != nil {
 		log.Errorw("failed accepting ci command", "error", err)
 		errorResponse(w, err, http.StatusBadRequest)
@@ -261,11 +255,12 @@ func doGDSCI(ctx context.Context, c *gds.Client) error {
 		}
 
 		log.Infow("accepting command", "command", req.Command, "note", n.Note)
-		err = ci.Accept(ctx, nil, "", req.Command)
+		msgID, err := ci.Accept(ctx, rdb, req.Command)
 		if err != nil {
 			log.Errorw("failed accepting ci command", "error", err)
 			continue
 		}
+		log.Infow("accepted command", "command", req.Command, "command_id", msgID)
 	}
 
 	log.Infow("finished processing notes", "note_count", len(notes), "elapsed", time.Since(startTime))
