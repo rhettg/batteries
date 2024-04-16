@@ -89,9 +89,19 @@ func loadDotEnv() error {
 		key := strings.TrimSpace(parts[0])
 		value := strings.TrimSpace(parts[1])
 
+		if strings.HasPrefix(key, "#") {
+			// Skip comments
+			continue
+		}
+
 		// Remove surrounding quotes
-		re := regexp.MustCompile(`^(['"])(.*)\1$`)
-		value = re.ReplaceAllString(value, "$2")
+		re := regexp.MustCompile(`^["'](.*)["']$`)
+
+		if re.MatchString(value) {
+			value = re.ReplaceAllString(value, `$1`)
+		}
+
+		fmt.Printf("Setting environment variable: %s=%s\n", key, value)
 
 		// Set environment variable
 		err := os.Setenv(key, value)
