@@ -20,6 +20,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"github.com/redis/go-redis/v9"
 	"github.com/rhettg/batteries/yakapi/internal/ci"
 	"github.com/rhettg/batteries/yakapi/internal/gds"
 	mw "github.com/rhettg/batteries/yakapi/internal/mw"
@@ -52,6 +53,7 @@ type resource struct {
 	Ref  string `json:"ref"`
 }
 
+var rdb *redis.Client
 var startTime time.Time
 
 func init() {
@@ -192,17 +194,29 @@ func handleCI(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err = ci.Accept(r.Context(), req.Command)
+	msgID, err := ci.Stream(r.Context(), rdb, req.Command)
+	if err != nil {
+		log.Errorw("failed streaming ci command", "error", err)
+		// Fall-through as long as we're still doing the old-ci.
+	}
+
+	err = ci.Accept(r.Context(), rdb, msgID, req.Command)
 	if err != nil {
 		log.Errorw("failed accepting ci command", "error", err)
 		errorResponse(w, err, http.StatusBadRequest)
 		return
 	}
 
+	result, err := ci.FetchResult(r.Context(), rdb, msgID)
+	if err != nil {
+		log.Errorw("failed fetching ci command result", "error", err)
+		result = "failed retrieving result"
+	}
+
 	resp := struct {
 		Result string `json:"result"`
 	}{
-		Result: "ok",
+		Result: result,
 	}
 
 	err = sendResponse(w, resp, http.StatusAccepted)
@@ -247,7 +261,7 @@ func doGDSCI(ctx context.Context, c *gds.Client) error {
 		}
 
 		log.Infow("accepting command", "command", req.Command, "note", n.Note)
-		err = ci.Accept(ctx, req.Command)
+		err = ci.Accept(ctx, nil, "", req.Command)
 		if err != nil {
 			log.Errorw("failed accepting ci command", "error", err)
 			continue
@@ -358,6 +372,19 @@ func main() {
 		if s.Key == "vcs.revision" {
 			revision = s.Value
 			break
+		}
+	}
+
+	if os.Getenv("YAKAPI_REDIS_URL") != "" {
+		log.Infow("configuring redis", "url", os.Getenv("YAKAPI_REDIS_URL"))
+		rdb = redis.NewClient(&redis.Options{
+			Addr: os.Getenv("YAKAPI_REDIS_URL"),
+		})
+
+		ping := rdb.Ping(context.Background())
+		if err := ping.Err(); err != nil {
+			log.Errorw("failed connecting to redis", "error", err)
+			rdb = nil
 		}
 	}
 
