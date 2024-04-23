@@ -1,18 +1,16 @@
-package api
+package mw
 
 import (
 	"context"
+	"log/slog"
 	"net/http"
 	"strconv"
 	"time"
-
-	"go.uber.org/zap"
-	"go.uber.org/zap/zapcore"
 )
 
-type zapmwkey int
+type logmwkey int
 
-const key zapmwkey = iota
+const key logmwkey = iota
 
 type ResponseWriterWrapper struct {
 	w          http.ResponseWriter
@@ -35,20 +33,19 @@ func (i *ResponseWriterWrapper) Header() http.Header {
 	return i.w.Header()
 }
 
-// New returns a new logging middleware using the provided *zap.Logger
-func New(logger *zap.Logger) func(next http.Handler) http.Handler {
+func NewLoggerMiddleware(logger *slog.Logger) func(next http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			start := time.Now()
 
 			// set incomplete request fields
-			l := logger.With(
-				zap.String("method", r.Method),
-				zap.String("path", r.URL.Path),
-				zap.String("remote_addr", r.RemoteAddr),
-				zap.String("user_agent", r.UserAgent()),
-				zap.String("referrer", r.Referer()),
-				zap.Time("start_time", start),
+			l := slog.With(
+				"method", r.Method,
+				"path", r.URL.Path,
+				"remote_addr", r.RemoteAddr,
+				"user_agent", r.UserAgent(),
+				"referrer", r.Referer(),
+				"start_time", start,
 			)
 
 			// store logger in context
@@ -60,9 +57,9 @@ func New(logger *zap.Logger) func(next http.Handler) http.Handler {
 
 			// get completed request fields
 			l = l.With(
-				zap.Duration("duration", time.Since(start)),
-				zap.Int("status", ww.statusCode),
-				zap.Int("bytes_written", ww.written),
+				"duration", time.Since(start),
+				"status", ww.statusCode,
+				"bytes_written", ww.written,
 			)
 
 			logHTTPStatus(l, ww.statusCode)
@@ -70,34 +67,31 @@ func New(logger *zap.Logger) func(next http.Handler) http.Handler {
 	}
 }
 
-func logHTTPStatus(l *zap.Logger, status int) {
+func logHTTPStatus(l *slog.Logger, status int) {
 	var msg string
 	if msg = http.StatusText(status); msg == "" {
 		msg = "unknown status " + strconv.Itoa(status)
 	}
 
-	var level zapcore.Level
+	var level slog.Level
 	switch {
 	case status >= 500:
-		level = zapcore.ErrorLevel
+		level = slog.LevelError
 	case status >= 400:
-		level = zapcore.InfoLevel
+		level = slog.LevelInfo
 	case status >= 300:
-		level = zapcore.InfoLevel
+		level = slog.LevelInfo
 	default:
-		level = zapcore.InfoLevel
+		level = slog.LevelInfo
 	}
 
-	if ce := l.Check(level, msg); ce != nil {
-		ce.Write()
-	}
+	l.Log(context.Background(), level, msg)
 }
 
-// Extract returns the *zap.Logger set by zapmw. If no logger is
-// found in the context, zap.NewNop() is returned.
-func Extract(ctx context.Context) *zap.Logger {
-	if logger, ok := ctx.Value(key).(*zap.Logger); ok {
+// Extract returns the logger set by mw.
+func Extract(ctx context.Context) *slog.Logger {
+	if logger, ok := ctx.Value(key).(*slog.Logger); ok {
 		return logger
 	}
-	return zap.NewNop()
+	return slog.Default()
 }

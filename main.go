@@ -17,7 +17,6 @@ import (
 	"time"
 
 	"gitlab.com/greyxor/slogor"
-	"go.uber.org/zap"
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
@@ -25,7 +24,7 @@ import (
 	"github.com/redis/go-redis/v9"
 	"github.com/rhettg/batteries/yakapi/internal/ci"
 	"github.com/rhettg/batteries/yakapi/internal/gds"
-	mw "github.com/rhettg/batteries/yakapi/internal/mw"
+	"github.com/rhettg/batteries/yakapi/internal/mw"
 	"github.com/rhettg/batteries/yakapi/internal/telemetry"
 	"tailscale.com/client/tailscale"
 )
@@ -152,7 +151,7 @@ func me(w http.ResponseWriter, r *http.Request) {
 	whois, err := tailscale.WhoIs(r.Context(), r.RemoteAddr)
 	if err != nil {
 		errorResponse(w, errors.New("unknown"), http.StatusInternalServerError)
-		log.Errorw("whois failure", "error", err)
+		slog.Error("whois failure", "error", err)
 		return
 	}
 
@@ -168,7 +167,7 @@ func me(w http.ResponseWriter, r *http.Request) {
 
 	err = sendResponse(w, &resp, http.StatusOK)
 	if err != nil {
-		log.Errorw("error sending response", "err", err)
+		slog.Error("error sending response", "err", err)
 		return
 	}
 }
@@ -197,14 +196,14 @@ func handleCI(w http.ResponseWriter, r *http.Request) {
 	defer r.Body.Close()
 
 	if err != nil {
-		log.Errorw("failed parsing body", "error", err)
+		slog.Error("failed parsing body", "error", err)
 		errorResponse(w, errors.New("failed parsing body"), http.StatusBadRequest)
 		return
 	}
 
 	msgID, err := ci.Accept(r.Context(), rdb, req.Command)
 	if err != nil {
-		log.Errorw("failed accepting ci command", "error", err)
+		slog.Error("failed accepting ci command", "error", err)
 		errorResponse(w, err, http.StatusBadRequest)
 		return
 	}
@@ -216,7 +215,7 @@ func handleCI(w http.ResponseWriter, r *http.Request) {
 		cancel()
 
 		if err != nil {
-			log.Errorw("failed fetching ci command result", "error", err)
+			slog.Error("failed fetching ci command result", "error", err)
 			errorResult = err.Error()
 		}
 	}
@@ -233,7 +232,7 @@ func handleCI(w http.ResponseWriter, r *http.Request) {
 
 	err = sendResponse(w, resp, http.StatusAccepted)
 	if err != nil {
-		log.Errorw("error sending response", "error", err)
+		slog.Error("error sending response", "error", err)
 		return
 	}
 }
@@ -241,7 +240,7 @@ func handleCI(w http.ResponseWriter, r *http.Request) {
 func doGDSCI(ctx context.Context, c *gds.Client) error {
 	startTime := time.Now()
 
-	log.Infow("retrieving commands from GDS")
+	slog.Info("retrieving commands from GDS")
 
 	notes, err := c.GetNotes(ctx)
 	if err != nil {
@@ -256,32 +255,32 @@ func doGDSCI(ctx context.Context, c *gds.Client) error {
 		// Reset our command
 		req.Command = ""
 
-		log.Infow("processing note", "file", n.File, "note", n.Note, "created_at", n.CreatedAt)
+		slog.Info("processing note", "file", n.File, "note", n.Note, "created_at", n.CreatedAt)
 		if n.File != "commands.qi" {
 			continue
 		}
 
 		err = json.Unmarshal([]byte(n.Body), &req)
 		if err != nil {
-			log.Errorw("failed unmarshaling note", "error", err, "note", n.Note)
+			slog.Error("failed unmarshaling note", "error", err, "note", n.Note)
 			continue
 		}
 
 		if req.Command == "" {
-			log.Errorw("empty command", "note", n.Note)
+			slog.Error("empty command", "note", n.Note)
 			continue
 		}
 
-		log.Infow("accepting command", "command", req.Command, "note", n.Note)
+		slog.Info("accepting command", "command", req.Command, "note", n.Note)
 		msgID, err := ci.Accept(ctx, rdb, req.Command)
 		if err != nil {
-			log.Errorw("failed accepting ci command", "error", err)
+			slog.Error("failed accepting ci command", "error", err)
 			continue
 		}
-		log.Infow("accepted command", "command", req.Command, "command_id", msgID)
+		slog.Info("accepted command", "command", req.Command, "command_id", msgID)
 	}
 
-	log.Infow("finished processing notes", "note_count", len(notes), "elapsed", time.Since(startTime))
+	slog.Info("finished processing notes", "note_count", len(notes), "elapsed", time.Since(startTime))
 
 	return nil
 }
@@ -339,18 +338,12 @@ func homev1(w http.ResponseWriter, r *http.Request) {
 
 	err := sendResponse(w, resp, http.StatusOK)
 	if err != nil {
-		log.Errorw("error sending response", "error", err)
+		slog.Error("error sending response", "error", err)
 		return
 	}
 }
 
-var log *zap.SugaredLogger
-
 func main() {
-	logger, _ := zap.NewDevelopment()
-	defer logger.Sync() // flushes buffer, if any
-	log = logger.Sugar()
-
 	slog.SetDefault(slog.New(slogor.NewHandler(os.Stderr, slogor.Options{
 		Level:      slog.LevelInfo,
 		TimeFormat: time.Stamp,
@@ -363,9 +356,9 @@ func main() {
 		return float64(time.Since(startTime).Seconds())
 	})
 
-	logmw := mw.New(logger)
-
 	loadDotEnv()
+
+	logmw := mw.NewLoggerMiddleware(slog.Default())
 
 	http.Handle("/", logmw(http.HandlerFunc(home)))
 	http.Handle("/v1", logmw(http.HandlerFunc(homev1)))
@@ -382,7 +375,7 @@ func main() {
 
 	info, ok := debug.ReadBuildInfo()
 	if !ok {
-		log.Errorw("failed loading build info")
+		slog.Error("failed loading build info")
 	}
 
 	revision := "unknown"
@@ -398,17 +391,17 @@ func main() {
 		redis_url = os.Getenv("YAKAPI_REDIS_URL")
 	}
 
-	log.Infow("configuring redis", "url", redis_url)
+	slog.Info("configuring redis", "url", redis_url)
 	rdb = redis.NewClient(&redis.Options{
 		Addr: redis_url,
 	})
 
 	ping := rdb.Ping(context.Background())
 	if err := ping.Err(); err != nil {
-		log.Errorw("failed connecting to redis", "error", err)
+		slog.Error("failed connecting to redis", "error", err)
 		rdb = nil
 	} else {
-		log.Infow("redis connected")
+		slog.Info("redis connected")
 	}
 
 	if os.Getenv("YAKAPI_GDS_API_URL") != "" {
@@ -417,7 +410,7 @@ func main() {
 			for {
 				err := doGDSCI(context.Background(), c)
 				if err != nil {
-					log.Errorw("error running GDS CI", "error", err)
+					slog.Error("error running GDS CI", "error", err)
 				}
 				time.Sleep(10 * time.Second)
 			}
@@ -441,10 +434,10 @@ func main() {
 
 				err := c.SendTelemetry(context.Background(), t)
 				if err != nil {
-					log.Errorw("error uploading telemetry to GDS", "error", err)
+					slog.Error("error uploading telemetry to GDS", "error", err)
 				}
 
-				log.Infow("uploaded telemetry to GDS", "data", t)
+				slog.Info("uploaded telemetry to GDS", "data", t)
 				time.Sleep(10 * time.Second)
 			}
 		}()
@@ -453,13 +446,13 @@ func main() {
 	go func() {
 		err := telemetry.Run(context.Background(), rdb, "yakapi:telemetry")
 		if err != nil {
-			log.Errorw("error running telemetry", "error", err)
+			slog.Error("error running telemetry", "error", err)
 		}
 	}()
 
-	log.Infow("starting", "version", "1.0.0", "port", port, "build", revision)
+	slog.Info("starting", "version", "1.0.0", "port", port, "build", revision)
 	err := http.ListenAndServe(fmt.Sprintf(":%s", port), nil)
 	if err != nil {
-		log.Errorw("error from ListenAndServer", "error", err)
+		slog.Error("error from ListenAndServer", "error", err)
 	}
 }
