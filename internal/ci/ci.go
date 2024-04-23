@@ -28,38 +28,7 @@ func Accept(ctx context.Context, rdb *redis.Client, cmd string) (CommandID, erro
 		return "", err
 	}
 
-	f := strings.Fields(cmd)
-	switch f[0] {
-	case "ping":
-		// Nothing to do.
-	case "fwd":
-		err = doFwd(ctx, f[1:])
-	case "ffwd":
-		err = doFfwd(ctx, f[1:])
-	case "bck":
-		err = doBck(ctx, f[1:])
-	case "lt":
-		err = doLT(ctx, f[1:])
-	case "rt":
-		err = doRT(ctx, f[1:])
-	default:
-		err = errors.New("unknown command")
-	}
-
-	var result string
-	if err != nil {
-		result = "error"
-	} else {
-		result = "ok"
-	}
-
-	resultErr := streamResult(ctx, rdb, id, result)
-
-	if err != nil {
-		return id, err
-	}
-
-	return id, resultErr
+	return id, nil
 }
 
 func stream(ctx context.Context, rdb *redis.Client, cmd string) (CommandID, error) {
@@ -89,40 +58,25 @@ func stream(ctx context.Context, rdb *redis.Client, cmd string) (CommandID, erro
 	return CommandID(result), nil
 }
 
-func streamResult(ctx context.Context, rdb *redis.Client, id CommandID, cmdResult string) error {
-	if rdb == nil {
-		return nil
-	}
-
-	result, err := rdb.XAdd(ctx, &redis.XAddArgs{
-		Stream: "yakapi:ci:result",
-		ID:     string(id),
-		Values: map[string]interface{}{
-			"result": cmdResult,
-		},
-	}).Result()
-
-	if err != nil {
-		return fmt.Errorf("failed to stream command result: %w", err)
-	}
-
-	slog.Info("streamed command result", "stream", "yakapi:ci:result", "id", id, "result_id", result, "result", cmdResult)
-	return nil
-}
-
 func FetchResult(ctx context.Context, rdb *redis.Client, id CommandID) (string, error) {
 	if rdb == nil {
 		return "", nil
 	}
 
-	messages, err := rdb.XRange(ctx, "yakapi:ci:result", string(id), string(id)).Result()
-	if err != nil {
-		fmt.Println("Error reading specific ID from stream:", err)
-		return "", err
+	var messages []redis.XMessage
+	var err error
+
+	for len(messages) == 0 {
+		time.Sleep(100 * time.Millisecond)
+		messages, err = rdb.XRange(ctx, "yakapi:ci:result", string(id), string(id)).Result()
+		if err != nil {
+			fmt.Println("Error reading specific ID from stream:", err)
+			return "", err
+		}
 	}
 
-	if len(messages) == 0 {
-		return "", fmt.Errorf("no result found for command %s", id)
+	if errStr, ok := messages[0].Values["error"]; ok {
+		return "", errors.New(errStr.(string))
 	}
 
 	return messages[0].Values["result"].(string), nil

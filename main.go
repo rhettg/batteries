@@ -181,6 +181,11 @@ func handleCI(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	waitForResult := false
+	if r.URL.Query().Get("wait") == "1" {
+		waitForResult = true
+	}
+
 	req := struct {
 		Command string `json:"command"`
 	}{}
@@ -201,16 +206,26 @@ func handleCI(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	result, err := ci.FetchResult(r.Context(), rdb, msgID)
-	if err != nil {
-		log.Errorw("failed fetching ci command result", "error", err)
-		result = "failed retrieving result"
+	var result, errorResult string
+	if waitForResult {
+		waitCtx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
+		result, err = ci.FetchResult(waitCtx, rdb, msgID)
+		cancel()
+
+		if err != nil {
+			log.Errorw("failed fetching ci command result", "error", err)
+			errorResult = err.Error()
+		}
 	}
 
 	resp := struct {
-		Result string `json:"result"`
+		ID     string `json:"id"`
+		Result string `json:"result,omitempty"`
+		Error  string `json:"error,omitempty"`
 	}{
+		ID:     string(msgID),
 		Result: result,
+		Error:  errorResult,
 	}
 
 	err = sendResponse(w, resp, http.StatusAccepted)
