@@ -1,8 +1,8 @@
 module github.com/rhettg/batteries/yakapi
 
-go 1.21
+go 1.22.0
 
-toolchain go1.21.1
+toolchain go1.22.1
 
 require (
 	github.com/prometheus/client_golang v1.15.1
@@ -39,6 +39,7 @@ require (
 	github.com/redis/go-redis/v9 v9.5.1 // indirect
 	github.com/stretchr/testify v1.8.4 // indirect
 	github.com/x448/float16 v0.8.4 // indirect
+	gitlab.com/greyxor/slogor v1.2.8 // indirect
 	go.uber.org/atomic v1.11.0 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
 	go4.org/intern v0.0.0-20211027215823-ae77deb06f29 // indirect
@@ -50,7 +51,7 @@ require (
 	golang.org/x/mod v0.12.0 // indirect
 	golang.org/x/net v0.15.0 // indirect
 	golang.org/x/sync v0.3.0 // indirect
-	golang.org/x/sys v0.12.0 // indirect
+	golang.org/x/sys v0.19.0 // indirect
 	golang.org/x/text v0.13.0 // indirect
 	golang.org/x/tools v0.13.0 // indirect
 	golang.zx2c4.com/wireguard/windows v0.5.3 // indirect

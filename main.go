@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io/ioutil"
+	"log/slog"
 	"net/http"
 	"os"
 	"regexp"
@@ -15,6 +16,7 @@ import (
 	"strings"
 	"time"
 
+	"gitlab.com/greyxor/slogor"
 	"go.uber.org/zap"
 
 	"github.com/prometheus/client_golang/prometheus"
@@ -24,6 +26,7 @@ import (
 	"github.com/rhettg/batteries/yakapi/internal/ci"
 	"github.com/rhettg/batteries/yakapi/internal/gds"
 	mw "github.com/rhettg/batteries/yakapi/internal/mw"
+	"github.com/rhettg/batteries/yakapi/internal/telemetry"
 	"tailscale.com/client/tailscale"
 )
 
@@ -348,6 +351,11 @@ func main() {
 	defer logger.Sync() // flushes buffer, if any
 	log = logger.Sugar()
 
+	slog.SetDefault(slog.New(slogor.NewHandler(os.Stderr, slogor.Options{
+		Level:      slog.LevelInfo,
+		TimeFormat: time.Stamp,
+	})))
+
 	promauto.NewGaugeFunc(prometheus.GaugeOpts{
 		Name: "yakapi_uptime_seconds",
 		Help: "The uptime of the yakapi service",
@@ -441,6 +449,13 @@ func main() {
 			}
 		}()
 	}
+
+	go func() {
+		err := telemetry.Run(context.Background(), rdb, "yakapi:telemetry")
+		if err != nil {
+			log.Errorw("error running telemetry", "error", err)
+		}
+	}()
 
 	log.Infow("starting", "version", "1.0.0", "port", port, "build", revision)
 	err := http.ListenAndServe(fmt.Sprintf(":%s", port), nil)
