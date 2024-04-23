@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io/ioutil"
 	"log/slog"
 	"net/http"
 	"os"
@@ -293,7 +292,7 @@ func handleCamCapture(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	content, err := ioutil.ReadFile(captureFile)
+	content, err := os.ReadFile(captureFile)
 	if err != nil {
 		errorResponse(w, err, http.StatusInternalServerError)
 		return
