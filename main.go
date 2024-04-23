@@ -390,7 +390,7 @@ func main() {
 		redis_url = os.Getenv("YAKAPI_REDIS_URL")
 	}
 
-	log.Infow("configuring redis", "url", os.Getenv("YAKAPI_REDIS_URL"))
+	log.Infow("configuring redis", "url", redis_url)
 	rdb = redis.NewClient(&redis.Options{
 		Addr: redis_url,
 	})

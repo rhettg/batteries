@@ -1,0 +1,25 @@
+version: '3'
+services:
+  yakapi:
+    build: .
+    ports:
+      - "8080:8080"
+    environment:
+      YAKAPI_REDIS_URL: redis:6379
+    depends_on:
+    - redis
+
+  redis:
+    image: redis
+
+  ci:
+    build: 
+      context: ./examples
+    volumes:
+      - ./examples:/app
+    working_dir: /app
+    environment:
+      YAKAPI_REDIS_URL: redis:6379
+    command: python ci.py
+    depends_on:
+      - redis

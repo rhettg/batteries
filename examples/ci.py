@@ -61,8 +61,9 @@ def send_result(rds, id, result, error=None):
     print(f"sent response: {response}")
 
 def main():
+    redis_url = os.environ.get("YAKAPI_REDIS_URL", "localhost:6379")
     rds = redis.from_url(os.environ.get(
-        "REDIS_URL", "redis://localhost:6379/0"))
+        "REDIS_URL", f"redis://{redis_url}/0"))
     if not rds.ping():
         print("Redis is not available", file=sys.stderr)
         sys.exit(1)

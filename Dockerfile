@@ -1,4 +1,4 @@
-FROM golang:1.18
+FROM golang:1.22
 
 WORKDIR /usr/src/yakapi
 
@@ -9,7 +9,6 @@ RUN go mod download && go mod verify
 COPY . .
 RUN go build -v -o /usr/local/bin/yakapi .
 
-ENV YAKAPI_PORT=8080
 ENV YAKAPI_NAME="Yak Bot"
 ENV YAKAPI_PROJECT_URL="https://github.com/The-Yak-Collective/yakrover"
 
