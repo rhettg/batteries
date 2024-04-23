@@ -120,13 +120,6 @@ func loadDotEnv() error {
 	return nil
 }
 
-var (
-	opsProcessed = promauto.NewCounter(prometheus.CounterOpts{
-		Name: "yakapi_processed_ops_total",
-		Help: "The total number of processed requests",
-	})
-)
-
 func errorResponse(w http.ResponseWriter, respErr error, statusCode int) error {
 	resp := struct {
 		Error string `json:"error"`
@@ -304,8 +297,6 @@ func handleCamCapture(w http.ResponseWriter, r *http.Request) {
 }
 
 func homev1(w http.ResponseWriter, r *http.Request) {
-	opsProcessed.Inc()
-
 	resp := struct {
 		Name      string     `json:"name"`
 		UpTime    int64      `json:"uptime"`
@@ -357,15 +348,29 @@ func main() {
 
 	loadDotEnv()
 
-	logmw := mw.NewLoggerMiddleware(slog.Default())
+	counter := prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "yakapi_requests_total",
+			Help: "A counter for requests to the server.",
+		},
+		[]string{"code", "method"},
+	)
 
-	http.Handle("/", logmw(http.HandlerFunc(home)))
-	http.Handle("/v1", logmw(http.HandlerFunc(homev1)))
-	http.Handle("/v1/me", logmw(http.HandlerFunc(me)))
-	http.Handle("/v1/ci", logmw(http.HandlerFunc(handleCI)))
-	http.Handle("/v1/cam/capture", logmw(http.HandlerFunc(handleCamCapture)))
-	http.Handle("/metrics", logmw(promhttp.Handler()))
-	http.Handle("/eyes", logmw(http.HandlerFunc(eyes)))
+	prometheus.MustRegister(counter)
+
+	var wrapper func(http.Handler) http.Handler
+	logmw := mw.NewLoggerMiddleware(slog.Default())
+	wrapper = func(next http.Handler) http.Handler {
+		return promhttp.InstrumentHandlerCounter(counter, logmw(next))
+	}
+
+	http.Handle("/", wrapper(http.HandlerFunc(home)))
+	http.Handle("/v1", wrapper(http.HandlerFunc(homev1)))
+	http.Handle("/v1/me", wrapper(http.HandlerFunc(me)))
+	http.Handle("/v1/ci", wrapper(http.HandlerFunc(handleCI)))
+	http.Handle("/v1/cam/capture", wrapper(http.HandlerFunc(handleCamCapture)))
+	http.Handle("/metrics", wrapper(promhttp.Handler()))
+	http.Handle("/eyes", wrapper(http.HandlerFunc(eyes)))
 
 	port := os.Getenv("YAKAPI_PORT")
 	if port == "" {
