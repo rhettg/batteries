@@ -12,6 +12,5 @@ RUN go build -v -o /usr/local/bin/yakapi .
 ENV YAKAPI_PORT=8080
 ENV YAKAPI_NAME="Yak Bot"
 ENV YAKAPI_PROJECT_URL="https://github.com/The-Yak-Collective/yakrover"
-ENV YAKAPI_ADAPTER_MOTOR="echo"
 
 CMD ["yakapi"]

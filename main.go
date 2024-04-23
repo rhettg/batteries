@@ -385,17 +385,22 @@ func main() {
 		}
 	}
 
+	redis_url := "127.0.0.1:6379"
 	if os.Getenv("YAKAPI_REDIS_URL") != "" {
-		log.Infow("configuring redis", "url", os.Getenv("YAKAPI_REDIS_URL"))
-		rdb = redis.NewClient(&redis.Options{
-			Addr: os.Getenv("YAKAPI_REDIS_URL"),
-		})
+		redis_url = os.Getenv("YAKAPI_REDIS_URL")
+	}
 
-		ping := rdb.Ping(context.Background())
-		if err := ping.Err(); err != nil {
-			log.Errorw("failed connecting to redis", "error", err)
-			rdb = nil
-		}
+	log.Infow("configuring redis", "url", os.Getenv("YAKAPI_REDIS_URL"))
+	rdb = redis.NewClient(&redis.Options{
+		Addr: redis_url,
+	})
+
+	ping := rdb.Ping(context.Background())
+	if err := ping.Err(); err != nil {
+		log.Errorw("failed connecting to redis", "error", err)
+		rdb = nil
+	} else {
+		log.Infow("redis connected")
 	}
 
 	if os.Getenv("YAKAPI_GDS_API_URL") != "" {

@@ -1,6 +1,8 @@
 # YakAPI Server
 
-The YakAPI Server is meant to run on Rovers to provide an API for it.
+The YakAPI Server is meant to run on Rovers to provide an API for it. It is
+extensible by allowing implementation specific software to participate in a
+Rover software ecosystem using Redis as middleware.
 
 ## Usage
 
@@ -36,7 +38,11 @@ $ curl -s http://localhost:8080/v1 | jq .
 }
 ```
 
-Clients should expect resources to vary.
+### Services
+
+YakAPI requires additional services to provide actual functionality. It
+communicates with these services via Redis Streams. An example implementation is
+provided in [`examples/ci.py`](examples/ci.py).
 
 ### Development
 
@@ -60,16 +66,12 @@ $ docker build -f Dockerfile -t yakapi:latest .
 $ docker run --rm \
   -p 80:8080 \
   -e YAKAPI_NAME="My Rover" \
-  -e YAKAPI_MOTOR_ADAPTER="/var/motor/motor.py" \
-  -v /var/motor:/var/motor \
+  -e YAKAPI_REDIS_URL="127.0.0.1:6379" \
   -e YAKAPI_CAM_CAPTURE_PATH="/var/cam/capture.jpeg" \
   -v /var/cam:/var/cam \
  yakapi:latest 
 ...
 ```
-
-The only tricky part is correctly mounting any external dependencies such as
-script hooks and camera images into the container.
 
 ### Configuration
 
@@ -77,8 +79,8 @@ Configuration is primarily through environment variables
 
 * `YAKAPI_PORT` [default `8080`] port for api server to listen on
 * `YAKAPI_NAME` [default `YakBot`] name for rover 
+* `YAKAPI_REDIS_URL` [default `redis://localhost:6379`] URL for redis server
 * `YAKAPI_PROJECT_URL` [default `https://github.com/The-Yak-Collective/yakrover`] URL for more information
-* `YAKAPI_ADAPTER_MOTOR` [default `echo`] command to be executed to interact with motors
 * `YAKAPI_CAM_CAPTURE_PATH` path to image for camera.
 
 ## Components
@@ -98,8 +100,13 @@ yakapi_processed_ops_total 0
 
 ### ci (command injection)
 
-This service translates commands into motor settings. 
+This service translates commands into motor settings. There are two redis streams that a implementation must interact with:
+
+* `yakapi:ci` stream of accepted commands
+* `yakapi:ci:result` results of executing commands (XADD with the same id as the command)
 
 ### cam
 
 The camera component can current serve an image if placed in a configured path.
+
+**TODO**: Redis-ify

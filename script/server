@@ -5,7 +5,6 @@ script/build
 
 export YAKAPI_NAME="YakAPI (development)"
 export YAKAPI_PROJECT="https://github.com/rhettg/batteries/yakapi"
-export YAKAPI_ADAPTER_MOTOR="echo"
 export YAKAPI_CAM_CAPTURE_PATH="./testdata/mars.jpeg"
 
 ./bin/yakapi
