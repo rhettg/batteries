@@ -14,18 +14,6 @@ type Client struct {
 	httpClient *http.Client
 }
 
-type TelemetryLocation struct {
-	Latitude  float64 `json:"latitude"`
-	Longitude float64 `json:"longitude"`
-}
-
-type Telemetry struct {
-	SecondsSinceBoot int               `json:"seconds_since_boot"`
-	WifiRSSI         int               `json:"wifi_rssi"`
-	Heading          float64           `json:"heading"`
-	Location         TelemetryLocation `json:"location"`
-}
-
 func New(missionURL string) *Client {
 	return &Client{
 		missionURL: missionURL,
@@ -76,11 +64,11 @@ func (c *Client) GetNotes(ctx context.Context) ([]Note, error) {
 	return notes, nil
 }
 
-func (c *Client) SendTelemetry(ctx context.Context, telemetry Telemetry) error {
+func (c *Client) SendTelemetry(ctx context.Context, telemetry map[string]interface{}) error {
 	url := c.missionURL + "/notes/telemetry.qo"
 
 	data := struct {
-		Body Telemetry `json:"body"`
+		Body map[string]interface{} `json:"body"`
 	}{
 		Body: telemetry,
 	}

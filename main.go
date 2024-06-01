@@ -425,16 +425,8 @@ func main() {
 			c := gds.New(os.Getenv("YAKAPI_GDS_API_URL"))
 
 			for {
-				t := gds.Telemetry{
-					SecondsSinceBoot: int(time.Since(startTime).Seconds()),
-					/*
-						WifiRSSI:         -69,
-						Heading:          0,
-						Location: gds.TelemetryLocation{
-							Latitude:  40.0,
-							Longitude: -105.25,
-						},
-					*/
+				t := map[string]interface{}{
+					"seconds_since_boot": int(time.Since(startTime).Seconds()),
 				}
 
 				err := c.SendTelemetry(context.Background(), t)
