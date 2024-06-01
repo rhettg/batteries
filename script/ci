@@ -2,7 +2,7 @@
 set -e
 
 # Set the base URL of the YakAPI server
-base_url="http://localhost:8080"
+base_url="${YAKAPI_SERVER:-http://localhost:8080}"
 
 # Function to send a CI command
 send_command() {
