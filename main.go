@@ -335,6 +335,24 @@ func homev1(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func fetchTelemetryData(ctx context.Context, rdb *redis.Client) (map[string]interface{}, error) {
+	// Fetch the telemetry data from Redis
+	result, err := rdb.XRange(ctx, "yakapi:telemetry", "-", "+").Result()
+	if err != nil {
+		return nil, err
+	}
+
+	// Convert the result to a map[string]interface{}
+	telemetryData := make(map[string]interface{})
+	for _, message := range result {
+		for key, value := range message.Values {
+			telemetryData[key] = value
+		}
+	}
+
+	return telemetryData, nil
+}
+
 func main() {
 	slog.SetDefault(slog.New(slogor.NewHandler(os.Stderr, slogor.Options{
 		Level:      slog.LevelInfo,
@@ -424,18 +442,41 @@ func main() {
 		go func() {
 			c := gds.New(os.Getenv("YAKAPI_GDS_API_URL"))
 
+			cachedTd := make(map[string]interface{})
+
+			var lastSSB time.Time
+
 			for {
-				t := map[string]interface{}{
-					"seconds_since_boot": int(time.Since(startTime).Seconds()),
-				}
-
-				err := c.SendTelemetry(context.Background(), t)
+				td, err := fetchTelemetryData(context.Background(), rdb)
 				if err != nil {
-					slog.Error("error uploading telemetry to GDS", "error", err)
+					slog.Error("error fetching telemetry data from Redis", "error", err)
+					time.Sleep(10 * time.Second)
+					continue
 				}
 
-				slog.Info("uploaded telemetry to GDS", "data", t)
-				time.Sleep(10 * time.Second)
+				for key, value := range td {
+					if cachedTd[key] != value {
+						cachedTd[key] = value
+					} else {
+						delete(td, key)
+					}
+				}
+
+				if time.Since(lastSSB) > 10*time.Second {
+					td["seconds_since_boot"] = int(time.Since(startTime).Seconds())
+					lastSSB = time.Now()
+				}
+
+				if len(td) > 0 {
+					err = c.SendTelemetry(context.Background(), td)
+					if err != nil {
+						slog.Error("error uploading telemetry to GDS", "error", err)
+					} else {
+						slog.Info("uploaded telemetry to GDS", "data", td)
+					}
+				}
+
+				time.Sleep(1 * time.Second)
 			}
 		}()
 	}
