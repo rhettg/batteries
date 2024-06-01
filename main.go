@@ -30,7 +30,10 @@ import (
 
 var (
 	//go:embed assets/*
-	assets embed.FS
+	assets    embed.FS
+	rdb       *redis.Client
+	startTime time.Time
+	revision  = "unknown"
 )
 
 func home(w http.ResponseWriter, r *http.Request) {
@@ -53,9 +56,6 @@ type resource struct {
 	Name string `json:"name"`
 	Ref  string `json:"ref"`
 }
-
-var rdb *redis.Client
-var startTime time.Time
 
 func init() {
 	startTime = time.Now()
@@ -299,11 +299,13 @@ func handleCamCapture(w http.ResponseWriter, r *http.Request) {
 func homev1(w http.ResponseWriter, r *http.Request) {
 	resp := struct {
 		Name      string     `json:"name"`
+		Revision  string     `json:"revision"`
 		UpTime    int64      `json:"uptime"`
 		Resources []resource `json:"resources"`
 	}{
-		Name:   "YakAPI Server",
-		UpTime: int64(time.Since(startTime).Seconds()),
+		Name:     "YakAPI Server",
+		Revision: revision,
+		UpTime:   int64(time.Since(startTime).Seconds()),
 		Resources: []resource{
 			{Name: "metrics", Ref: "/metrics"},
 			{Name: "ci", Ref: "/v1/ci"},
@@ -382,7 +384,6 @@ func main() {
 		slog.Error("failed loading build info")
 	}
 
-	revision := "unknown"
 	for _, s := range info.Settings {
 		if s.Key == "vcs.revision" {
 			revision = s.Value
