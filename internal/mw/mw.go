@@ -33,6 +33,12 @@ func (i *ResponseWriterWrapper) Header() http.Header {
 	return i.w.Header()
 }
 
+func (i *ResponseWriterWrapper) Flush() {
+	if flusher, ok := i.w.(http.Flusher); ok {
+		flusher.Flush()
+	}
+}
+
 func NewLoggerMiddleware(logger *slog.Logger) func(next http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

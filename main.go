@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"net/http"
 	"os"
@@ -24,16 +25,18 @@ import (
 	"github.com/rhettg/batteries/yakapi/internal/ci"
 	"github.com/rhettg/batteries/yakapi/internal/gds"
 	"github.com/rhettg/batteries/yakapi/internal/mw"
+	"github.com/rhettg/batteries/yakapi/internal/stream"
 	"github.com/rhettg/batteries/yakapi/internal/telemetry"
 	"tailscale.com/client/tailscale"
 )
 
 var (
 	//go:embed assets/*
-	assets    embed.FS
-	rdb       *redis.Client
-	startTime time.Time
-	revision  = "unknown"
+	assets        embed.FS
+	rdb           *redis.Client
+	startTime     time.Time
+	revision      = "unknown"
+	streamManager *stream.Manager
 )
 
 func home(w http.ResponseWriter, r *http.Request) {
@@ -353,6 +356,51 @@ func fetchTelemetryData(ctx context.Context, rdb *redis.Client) (map[string]inte
 	return telemetryData, nil
 }
 
+func parseStreamPath(path string) string {
+	remaining, found := strings.CutPrefix(path, "/stream/")
+	if found {
+		return remaining
+	}
+	return ""
+}
+
+func handleStream(w http.ResponseWriter, r *http.Request) {
+	streamName := parseStreamPath(r.URL.Path)
+	if streamName == "" {
+		http.Error(w, "Invalid stream path", http.StatusBadRequest)
+		return
+	}
+
+	switch r.Method {
+	case http.MethodGet:
+		slog.Info("stream out", "stream", streamName)
+		w.Header().Set("Transfer-Encoding", "chunked")
+		err := stream.StreamOut(r.Context(), w, streamName, streamManager)
+		if err != nil {
+			http.Error(w, "Error streaming out", http.StatusInternalServerError)
+			return
+		}
+		slog.Info("stream out complete", "stream", streamName)
+	case http.MethodPost:
+		slog.Info("stream in", "stream", streamName)
+		body, err := io.ReadAll(r.Body)
+		if err != nil {
+			http.Error(w, "Error reading request body", http.StatusInternalServerError)
+			return
+		}
+
+		err = stream.StreamIn(r.Context(), streamName, body, streamManager)
+		if err != nil {
+			http.Error(w, "Error streaming in", http.StatusInternalServerError)
+			return
+		}
+
+		w.WriteHeader(http.StatusOK)
+	default:
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+	}
+}
+
 func main() {
 	slog.SetDefault(slog.New(slogor.NewHandler(os.Stderr, slogor.Options{
 		Level:      slog.LevelInfo,
@@ -391,6 +439,7 @@ func main() {
 	http.Handle("/v1/cam/capture", wrapper(http.HandlerFunc(handleCamCapture)))
 	http.Handle("/metrics", wrapper(promhttp.Handler()))
 	http.Handle("/eyes", wrapper(http.HandlerFunc(eyes)))
+	http.Handle("/stream/", wrapper(http.HandlerFunc(handleStream)))
 
 	port := os.Getenv("YAKAPI_PORT")
 	if port == "" {
@@ -426,6 +475,8 @@ func main() {
 	} else {
 		slog.Info("redis connected")
 	}
+
+	streamManager = stream.NewManager()
 
 	if os.Getenv("YAKAPI_GDS_API_URL") != "" {
 		go func() {
@@ -482,6 +533,9 @@ func main() {
 	}
 
 	go func() {
+		if rdb == nil {
+			return
+		}
 		err := telemetry.Run(context.Background(), rdb, "yakapi:telemetry")
 		if err != nil {
 			slog.Error("error running telemetry", "error", err)
