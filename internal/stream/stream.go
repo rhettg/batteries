@@ -9,9 +9,37 @@ import (
 	"sync"
 )
 
+type streamChan chan []byte
+
 type Stream struct {
-	Name string
-	data chan []byte
+	Name    string
+	dataIn  streamChan
+	dataOut []streamChan
+
+	mu sync.RWMutex
+}
+
+func (s *Stream) stream() {
+	for data := range s.dataIn {
+		s.mu.RLock()
+		for _, out := range s.dataOut {
+			select {
+			case out <- data:
+			default:
+				slog.Warn("dropping data from stream", "stream", s.Name)
+			}
+		}
+		s.mu.RUnlock()
+	}
+}
+
+func (s *Stream) NewReader() streamChan {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	ch := make(streamChan, 8)
+	s.dataOut = append(s.dataOut, ch)
+	return ch
 }
 
 type Manager struct {
@@ -19,19 +47,44 @@ type Manager struct {
 	mu      sync.RWMutex
 }
 
-func (sm *Manager) Get(name string) *Stream {
+func New(name string) *Stream {
+	s := Stream{
+		Name:    name,
+		dataIn:  make(streamChan),
+		dataOut: make([]streamChan, 0),
+	}
+
+	go s.stream()
+
+	return &s
+}
+
+func (sm *Manager) GetWriter(name string) streamChan {
 	sm.mu.Lock()
 	defer sm.mu.Unlock()
 
 	if s, ok := sm.streams[name]; ok {
-		return s
+		return s.dataIn
 	}
 
-	sm.streams[name] = &Stream{
-		Name: name,
-		data: make(chan []byte),
+	sm.streams[name] = New(name)
+
+	return sm.streams[name].dataIn
+}
+
+func (sm *Manager) GetReader(name string) streamChan {
+	sm.mu.Lock()
+	defer sm.mu.Unlock()
+
+	var s *Stream
+	if sm.streams[name] != nil {
+		s = sm.streams[name]
+	} else {
+		s = New(name)
+		sm.streams[name] = s
 	}
-	return sm.streams[name]
+
+	return s.NewReader()
 }
 
 func NewManager() *Manager {
@@ -41,10 +94,14 @@ func NewManager() *Manager {
 }
 
 func StreamOut(ctx context.Context, w io.Writer, streamName string, sm *Manager) error {
-	s := sm.Get(streamName)
+	s := sm.GetReader(streamName)
 	for {
 		select {
-		case data := <-s.data:
+		case data, ok := <-s:
+			if !ok {
+				slog.Info("stream closed", "stream", streamName)
+				return nil
+			}
 			_, err := w.Write(data)
 			if err != nil {
 				return errors.New("error writing data")
@@ -61,7 +118,7 @@ func StreamOut(ctx context.Context, w io.Writer, streamName string, sm *Manager)
 }
 
 func StreamIn(ctx context.Context, streamName string, b []byte, sm *Manager) error {
-	s := sm.Get(streamName)
-	s.data <- b
+	s := sm.GetWriter(streamName)
+	s <- b
 	return nil
 }
