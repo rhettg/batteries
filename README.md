@@ -12,7 +12,6 @@ Rover software ecosystem using Redis as middleware.
 
 The JSON API is versioned, so start with `/v1` and you'll receive a nice hello:
 
-```ShellSession
 $ curl -s http://localhost:8080/v1 | jq .
 {
   "name": "YakAPI (development)",
@@ -32,11 +31,10 @@ $ curl -s http://localhost:8080/v1 | jq .
     },
     {
       "name": "project",
-      "ref": "https://github.com/rhettg/batteries/yakapi"
+      "ref": "https://github.com/rhettg/yakapi"
     }
   ]
 }
-```
 
 ### Services
 

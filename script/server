@@ -4,7 +4,7 @@ set -e
 script/build
 
 export YAKAPI_NAME="YakAPI (development)"
-export YAKAPI_PROJECT="https://github.com/rhettg/batteries/yakapi"
+export YAKAPI_PROJECT="https://github.com/rhettg/yakapi"
 export YAKAPI_CAM_CAPTURE_PATH="./testdata/mars.jpeg"
 
 ./bin/yakapi
