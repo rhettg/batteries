@@ -69,8 +69,8 @@ github.com/stretchr/testify v1.8.4 h1:CcVxjf3Q8PM0mHUKJCdn+eZZtm5yQwehR5yeSVQQcU
 github.com/stretchr/testify v1.8.4/go.mod h1:sz/lmYIOXD/1dqDmKjjqLyZ2RngseejIcXlSw2iwfAo=
 github.com/x448/float16 v0.8.4 h1:qLwI1I70+NjRFUR3zs1JPUCgaCXSh3SW62uAKT1mSBM=
 github.com/x448/float16 v0.8.4/go.mod h1:14CWIYCyZA/cWjXOioeEpHeN/83MdbZDRQHoFcYsOfg=
-gitlab.com/greyxor/slogor v1.2.8 h1:HUGfwJJMqJ4AFDKIkZNpoUZv24JLUm+kyoyLklutMXQ=
-gitlab.com/greyxor/slogor v1.2.8/go.mod h1:blU4z8bhW/Jq0bjJDp4XQGbE5gh4XOqqU18PFGO8zDc=
+gitlab.com/greyxor/slogor v1.2.0 h1:OVh6LoQDUg3hcW2aqjgYwyWkYFrdzWtk1PqN++xgGVQ=
+gitlab.com/greyxor/slogor v1.2.0/go.mod h1:GdNqNbsM5q8/2+H7Le+KNl4pKu8WPEHtjjQYOl+/3xE=
 go4.org/mem v0.0.0-20220726221520-4f986261bf13 h1:CbZeCBZ0aZj8EfVgnqQcYZgf0lpZ3H9rmp5nkDTAst8=
 go4.org/mem v0.0.0-20220726221520-4f986261bf13/go.mod h1:reUoABIJ9ikfM5sgtSF3Wushcza7+WeD01VB9Lirh3g=
 go4.org/netipx v0.0.0-20230824141953-6213f710f925 h1:eeQDDVKFkx0g4Hyy8pHgmZaK0EqB4SD6rvKbUdN3ziQ=

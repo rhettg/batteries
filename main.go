@@ -16,17 +16,16 @@ import (
 	"strings"
 	"time"
 
-	"gitlab.com/greyxor/slogor"
-
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/redis/go-redis/v9"
-	"github.com/rhettg/batteries/yakapi/internal/ci"
-	"github.com/rhettg/batteries/yakapi/internal/gds"
-	"github.com/rhettg/batteries/yakapi/internal/mw"
-	"github.com/rhettg/batteries/yakapi/internal/stream"
-	"github.com/rhettg/batteries/yakapi/internal/telemetry"
+	"github.com/rhettg/yakapi/internal/ci"
+	"github.com/rhettg/yakapi/internal/gds"
+	"github.com/rhettg/yakapi/internal/mw"
+	"github.com/rhettg/yakapi/internal/stream"
+	"github.com/rhettg/yakapi/internal/telemetry"
+	"gitlab.com/greyxor/slogor"
 	"tailscale.com/client/tailscale"
 )
 
@@ -402,9 +401,10 @@ func handleStream(w http.ResponseWriter, r *http.Request) {
 }
 
 func main() {
-	slog.SetDefault(slog.New(slogor.NewHandler(os.Stderr, slogor.Options{
+	slog.SetDefault(slog.New(slogor.NewHandler(os.Stderr, &slogor.Options{
 		Level:      slog.LevelInfo,
 		TimeFormat: time.Stamp,
+		ShowSource: false,
 	})))
 
 	promauto.NewGaugeFunc(prometheus.GaugeOpts{

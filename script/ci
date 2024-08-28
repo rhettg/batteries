@@ -1,9 +1,14 @@
 #!/bin/bash
-set -xe
+set -e
 
-echo "Executing: $@"
-# Set a default value for the environment variable
-SERVER=${SERVER:=bni}
-COMMAND="$@"
+# Set the base URL of the YakAPI server
+base_url="${YAKAPI_SERVER:-http://localhost:8080}"
 
-curl http://${SERVER}/v1/ci -H "Content-Type: application/json" -X POST -d "{\"command\": \"$COMMAND\"}"
+# Function to send a CI command
+send_command() {
+  local command="$1"
+  curl -X POST -H "Content-Type: application/json" -d "{\"command\":\"$command\"}" "$base_url/v1/ci?wait=1"
+  echo
+}
+
+send_command "$@"

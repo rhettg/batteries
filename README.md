@@ -1,34 +1,110 @@
-# Batteries Not Included
+# YakAPI Server
 
-A [Yak Rover](https://github.com/The-Yak-Collective/yakrover) exploring flexible
-components for a more extensible Rover.
+The YakAPI Server is meant to run on Rovers to provide an API for it. It is
+extensible by allowing implementation specific software to participate in a
+Rover software ecosystem using Redis as middleware.
 
-Following my previous build, [A Stubborn Pursuit of a
-Path](https://github.com/rhettg/stubborn) I was looking for a more extensible
-build platform.
+## Usage
 
-The mechanical system is built around
-[Construx](https://www.youtube.com/watch?v=JJmKJyPviEA), a toy building system
-from the 80s that this author has a lot of experience with and found in an old box.
+`yakapi` acts as a http server that presents a JSON API
 
-Augmented with 3D printing, it has proven a very flexible build system.
+### API
+
+The JSON API is versioned, so start with `/v1` and you'll receive a nice hello:
+
+$ curl -s http://localhost:8080/v1 | jq .
+{
+  "name": "YakAPI (development)",
+  "uptime": 1,
+  "resources": [
+    {
+      "name": "metrics",
+      "ref": "/metrics"
+    },
+    {
+      "name": "ci",
+      "ref": "/v1/ci"
+    },
+    {
+      "name": "cam",
+      "ref": "/v1/cam/capture"
+    },
+    {
+      "name": "project",
+      "ref": "https://github.com/rhettg/yakapi"
+    }
+  ]
+}
+
+### Services
+
+YakAPI requires additional services to provide actual functionality. It
+communicates with these services via Redis Streams. An example implementation is
+provided in [`examples/ci.py`](examples/ci.py).
+
+### Development
+
+YakAPI lives by [scripts-to-rule-them-all](https://github.com/github/scripts-to-rule-them-all) rules.
+
+But dependencies and setup are limited. Really you should be able to go out of the box with:
+
+```ShellSession
+$ script/server
+2022-05-13T03:09:53.020Z        INFO    yakapi/main.go:218      starting        {"version": "1.0.0", "port": "8080"}
+```
+
+### Production
+
+Sky is the limit, but for easy integration a `Dockerfile` is provided that is easily customized by environment variables.
+
+```ShellSession
+
+$ docker build -f Dockerfile -t yakapi:latest .
+...
+$ docker run --rm \
+  -p 80:8080 \
+  -e YAKAPI_NAME="My Rover" \
+  -e YAKAPI_REDIS_URL="127.0.0.1:6379" \
+  -e YAKAPI_CAM_CAPTURE_PATH="/var/cam/capture.jpeg" \
+  -v /var/cam:/var/cam \
+ yakapi:latest 
+...
+```
+
+### Configuration
+
+Configuration is primarily through environment variables
+
+* `YAKAPI_PORT` [default `8080`] port for api server to listen on
+* `YAKAPI_NAME` [default `YakBot`] name for rover 
+* `YAKAPI_REDIS_URL` [default `redis://localhost:6379`] URL for redis server
+* `YAKAPI_PROJECT_URL` [default `https://github.com/The-Yak-Collective/yakrover`] URL for more information
+* `YAKAPI_CAM_CAPTURE_PATH` path to image for camera.
 
 ## Components
 
-* **Compute:** [Raspberry Pi Zero 2 W](https://www.raspberrypi.com/products/raspberry-pi-zero-2-w/)
-* **Sensor/Neural Package**: [Oak-D-Lite](https://docs.luxonis.com/projects/hardware/en/latest/pages/DM9095.html)
-* **Compute Battery:** Anker PowerCore Slim 10000mAh (Portable Charger)
-* **Drive:** 2x N20, [Adafruit DC Motor + Stepper FeatherWing](https://learn.adafruit.com/adafruit-stepper-dc-motor-featherwing)
-* **Drive Battery:** 6V 2000mAh NmH
+### Metrics
 
-### YakAPI
+Metrics are served in [prometheus](https://prometheus.io) format:
 
-Implements a web api for interacting with the Rover. Based on the proposal in https://github.com/The-Yak-Collective/yakrover/pull/3
+```ShellSession
+$ curl -s http://localhost:8080/metrics
+# HELP yakapi_processed_ops_total The total number of processed requests
+# TYPE yakapi_processed_ops_total counter
+yakapi_processed_ops_total 0
+...
 
-### Motor Adapter
+```
 
-Uses Circuit Python to provide a low-level interface into control motors.
+### ci (command injection)
 
-### OakD
+This service translates commands into motor settings. There are two redis streams that a implementation must interact with:
 
-Uses depthai library to access OakD-lite capabilities
+* `yakapi:ci` stream of accepted commands
+* `yakapi:ci:result` results of executing commands (XADD with the same id as the command)
+
+### cam
+
+The camera component can current serve an image if placed in a configured path.
+
+**TODO**: Redis-ify
